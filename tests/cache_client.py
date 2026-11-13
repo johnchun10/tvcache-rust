@@ -17,6 +17,8 @@ MARK_SANDBOXES_EVICTED_REQUEST = 5
 LIST_SANDBOX_CANDIDATES_REQUEST = 6
 DRAIN_RECLAIMABLE_SANDBOXES_REQUEST = 7
 LIST_HOT_SANDBOXES_REQUEST = 8
+REPORT_FORK_COST_REQUEST = 9
+GET_FORK_COST_REQUEST = 10
 LEASE_SANDBOX_REQUEST = 11
 LIST_SIBLING_GROUPS_REQUEST = 12
 APPLY_CONTRACTION_REQUEST = 13
@@ -29,6 +31,7 @@ UNREF_SANDBOX_RESULT_RESPONSE = 5
 MARK_SANDBOXES_EVICTED_RESULT_RESPONSE = 6
 SANDBOX_CANDIDATES_RESPONSE = 7
 RECLAIMABLE_SANDBOXES_RESPONSE = 8
+FORK_COST_RESPONSE = 9
 LEASE_RESULT_RESPONSE = 10
 SIBLING_GROUPS_RESPONSE = 11
 CONTRACTION_RESULT_RESPONSE = 12
@@ -152,6 +155,18 @@ def encode_drain_reclaimable_sandboxes() -> bytes:
 
 def encode_list_hot_sandboxes(limit: int = 10) -> bytes:
     return write_u8(LIST_HOT_SANDBOXES_REQUEST) + write_u16(limit)
+
+
+def encode_report_fork_cost(task_id: str, fork_cost_ms: int) -> bytes:
+    return (
+        write_u8(REPORT_FORK_COST_REQUEST)
+        + write_string_u16(task_id)
+        + write_u32(fork_cost_ms)
+    )
+
+
+def encode_get_fork_cost(task_id: str) -> bytes:
+    return write_u8(GET_FORK_COST_REQUEST) + write_string_u16(task_id)
 
 
 def encode_lease_sandbox(task_id: str, path: list[str]) -> bytes:
@@ -357,6 +372,9 @@ def decode_response(sock: socket.socket) -> dict[str, Any]:
             ],
         }
 
+    if response_type == FORK_COST_RESPONSE:
+        return {"type": "fork_cost", "fork_cost_ms": read_u32(sock)}
+
     raise ValueError(f"unknown response type: {response_type}")
 
 
@@ -441,6 +459,12 @@ class CacheClient:
 
     def list_hot_sandboxes(self, limit: int = 10) -> dict[str, Any]:
         return self.send_request(encode_list_hot_sandboxes(limit))
+
+    def report_fork_cost(self, task_id: str, fork_cost_ms: int) -> dict[str, Any]:
+        return self.send_request(encode_report_fork_cost(task_id, fork_cost_ms))
+
+    def get_fork_cost(self, task_id: str) -> dict[str, Any]:
+        return self.send_request(encode_get_fork_cost(task_id))
 
     def lease_sandbox(self, task_id: str, path: list[str]) -> dict[str, Any]:
         return self.send_request(encode_lease_sandbox(task_id, path))
@@ -543,6 +567,12 @@ class PersistentCacheClient:
 
     def list_hot_sandboxes(self, limit: int = 10) -> dict[str, Any]:
         return self.send_request(encode_list_hot_sandboxes(limit))
+
+    def report_fork_cost(self, task_id: str, fork_cost_ms: int) -> dict[str, Any]:
+        return self.send_request(encode_report_fork_cost(task_id, fork_cost_ms))
+
+    def get_fork_cost(self, task_id: str) -> dict[str, Any]:
+        return self.send_request(encode_get_fork_cost(task_id))
 
     def lease_sandbox(self, task_id: str, path: list[str]) -> dict[str, Any]:
         return self.send_request(encode_lease_sandbox(task_id, path))
@@ -744,6 +774,9 @@ async def async_decode_response(reader: asyncio.StreamReader) -> dict[str, Any]:
             ],
         }
 
+    if response_type == FORK_COST_RESPONSE:
+        return {"type": "fork_cost", "fork_cost_ms": await async_read_u32(reader)}
+
     raise ValueError(f"unknown response type: {response_type}")
 
 
@@ -835,6 +868,12 @@ class AsyncPersistentCacheClient:
 
     async def list_hot_sandboxes(self, limit: int = 10) -> dict[str, Any]:
         return await self.send_request(encode_list_hot_sandboxes(limit))
+
+    async def report_fork_cost(self, task_id: str, fork_cost_ms: int) -> dict[str, Any]:
+        return await self.send_request(encode_report_fork_cost(task_id, fork_cost_ms))
+
+    async def get_fork_cost(self, task_id: str) -> dict[str, Any]:
+        return await self.send_request(encode_get_fork_cost(task_id))
 
     async def lease_sandbox(self, task_id: str, path: list[str]) -> dict[str, Any]:
         return await self.send_request(encode_lease_sandbox(task_id, path))

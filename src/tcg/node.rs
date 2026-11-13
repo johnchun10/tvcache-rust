@@ -84,6 +84,12 @@ impl Node {
     }
 
     pub fn update_size_in_bytes(&mut self) {
+        self.size_in_bytes = self.computed_size_in_bytes();
+    }
+
+    /// Recomputes this node's size without storing it; the invariant checker
+    /// compares it against size_in_bytes.
+    pub fn computed_size_in_bytes(&self) -> u32 {
         let entries_size_in_bytes: u32 = self
             .tool_calls
             .iter()
@@ -103,14 +109,14 @@ impl Node {
             .as_ref()
             .map_or(0, |sandbox_id| sandbox_id.len() as u32);
 
-        self.size_in_bytes = entries_size_in_bytes
+        entries_size_in_bytes
             + sandbox_id_size_in_bytes
             + size_of_val(&self.settled) as u32
             + size_of_val(&self.ttl_present) as u32
             + size_of_val(&self.ttl) as u32
             + size_of_val(&self.inserted_at_seconds) as u32
             + size_of_val(&self.number_of_cache_hits) as u32
-            + size_of_val(&self.number_of_lpm_hits) as u32;
+            + size_of_val(&self.number_of_lpm_hits) as u32
     }
 }
 
