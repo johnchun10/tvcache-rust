@@ -192,9 +192,14 @@ async def test_apply_merges_recursively(client: AsyncPersistentCacheClient) -> N
         assert dump_node(dump, task_id, path)["settled"] is settled, path
     assert dump_node(dump, task_id, ["b", "x"])["value"] == "a-x"
 
-    await client.insert(task_id, ["b"], "b-new", None, runtime=1)
+    # Values are first-writer-wins per tool call (bug B2): a different value for
+    # b is refused, and an agreeing one is accepted without touching a's entry.
+    response = await client.insert(task_id, ["b"], "b-new", None, runtime=1)
+    assert response["value_inserted"] is False, response
+    response = await client.insert(task_id, ["b"], "b", None, runtime=1)
+    assert response["value_inserted"] is True, response
     response = await client.find(task_id, ["b"])
-    assert (response["value"], response["sandbox_id"]) == ("b-new", kept), response
+    assert (response["value"], response["sandbox_id"]) == ("b", kept), response
     await client.unref_sandbox(task_id, kept)
     dump = await apply(client, task_id, [], [], ["b"], (0, 0))
     assert dump_node(dump, task_id, ["a"])["value"] == "a"

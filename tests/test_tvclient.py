@@ -243,7 +243,8 @@ def _collect_sandbox_ids(node: dict) -> List[str]:
     sandbox_ids = []
     if node.get("sandbox_id") is not None:
         sandbox_ids.append(node["sandbox_id"])
-    for child in node.get("children", {}).values():
+    # With graph contraction the dump lists children instead of keying them by call.
+    for child in node.get("children", []):
         sandbox_ids.extend(_collect_sandbox_ids(child))
     return sandbox_ids
 
