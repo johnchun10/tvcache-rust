@@ -4,6 +4,12 @@
 //! maintained incrementally by insert, eviction and sandbox marking; this
 //! recomputes them from the tree so tests (and, later, a CheckInvariants
 //! request) can detect drift.
+//!
+//! Only bookkeeping and structure are checked. Which run produced a node's
+//! value and which produced its snapshot is not recorded, so it is not checked:
+//! insert keeps the two from the same run, while a contraction merge may pair
+//! one run's value with another run's snapshot, which is intended because the
+//! merged states compared equal (see `merge` in contraction.rs).
 
 use std::collections::BTreeSet;
 
@@ -90,7 +96,17 @@ fn walk(node: &Node, key: &str, is_root: bool, totals: &mut Totals, violations: 
         }
     }
 
+    // Contraction lets one node answer to several tool calls, so siblings
+    // are checked for sharing a call: lookups would be ambiguous otherwise.
+    let mut calls_seen = BTreeSet::new();
     for (child_key, child) in node.iter_children() {
+        for call in child.tool_calls.keys() {
+            if !calls_seen.insert(call) {
+                violations.push(format!(
+                    "tool call {call:?} names more than one child of node {key:?}"
+                ));
+            }
+        }
         walk(child, child_key, false, totals, violations);
     }
 }

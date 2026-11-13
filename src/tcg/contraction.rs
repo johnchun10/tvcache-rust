@@ -214,6 +214,12 @@ pub struct Merged {
 }
 
 /// Absorbs b into a, recursively merging children that share a tool call.
+///
+/// Callers merge two nodes only after their sandbox states compared equal, so
+/// the merged node may hold a value from one run next to a snapshot from the
+/// other. That is intended: unlike insert, which keeps a node's value and
+/// snapshot from the same run (B2), a merge treats the two runs as one state.
+/// Each tool call still keeps the first value written for it.
 fn merge(a: &mut Node, b: Node, merged: &mut Merged) {
     merged.absorbed_nodes += 1;
     a.settled = false;
@@ -410,6 +416,63 @@ mod tests {
             (nodes, sandboxes)
         );
         assert_eq!(graph.size_in_bytes, size);
+        let violations = graph.check_invariants();
+        assert!(violations.is_empty(), "invariants violated: {violations:?}");
+    }
+
+    /// A merge may leave a node with one run's value and the other run's
+    /// snapshot. Insert alone refuses that pairing (B2), but a merge only
+    /// happens after the two states compared equal, so it is intended and
+    /// the invariant checker accepts it.
+    #[test]
+    fn merge_may_pair_one_runs_value_with_the_other_runs_snapshot() {
+        let mut graph = ToolCallGraph::new();
+        let put = |graph: &mut ToolCallGraph, calls: &[&str], value: &str, snapshot: Option<&str>| {
+            let (value, snapshot) = (Some(value.to_string()), snapshot.map(str::to_string));
+            graph.insert(path(calls), value, snapshot, 1, None, false, None)
+        };
+        put(&mut graph, &["x"], "x", None);
+        put(&mut graph, &["y"], "y", None);
+        put(&mut graph, &["x", "c"], "run-x", None);
+        put(&mut graph, &["y", "c"], "run-y", Some("snapshot-y"));
+
+        // An insert cannot attach another run's snapshot to run x's value.
+        assert_eq!(
+            put(&mut graph, &["x", "c"], "run-y", Some("snapshot-z")),
+            (false, false)
+        );
+
+        assert!(graph.merge_siblings(&[], "x", "y"));
+        let merged = graph.root.child("y").unwrap();
+        assert_eq!(merged.tool_calls["x"].value.as_deref(), Some("x"));
+        assert_eq!(merged.tool_calls["y"].value.as_deref(), Some("y"));
+        let c = merged.child("c").unwrap();
+        assert_eq!(c.tool_calls["c"].value.as_deref(), Some("run-x"));
+        assert_eq!(c.sandbox_id.as_deref(), Some("snapshot-y"));
+        assert_counters(&graph);
+
+        // Ordinary inserts stay first-writer-wins per tool call afterwards.
+        assert_eq!(put(&mut graph, &["y"], "other", None), (false, false));
+        assert_eq!(put(&mut graph, &["x"], "x", Some("snapshot-x")), (true, true));
+        assert_eq!(put(&mut graph, &["y", "c"], "run-y", None), (false, false));
+        assert_eq!(graph.find(path(&["y", "c"])).0.as_deref(), Some("run-x"));
+        assert_counters(&graph);
+    }
+
+    #[test]
+    fn invariant_checker_reports_siblings_sharing_a_call() {
+        let mut graph = ToolCallGraph::new();
+        insert(&mut graph, &["a"], None);
+        insert(&mut graph, &["b"], None);
+        assert_counters(&graph);
+
+        let entry = ToolCallEntry::default();
+        graph.root.children[1].tool_calls.insert("a".into(), entry);
+        let violations = graph.check_invariants();
+        assert!(
+            violations.iter().any(|violation| violation.contains("more than one child")),
+            "{violations:?}"
+        );
     }
 
     fn insert(graph: &mut ToolCallGraph, path: &[&str], embedding: Option<Vec<f32>>) {

@@ -67,6 +67,9 @@ impl ToolCallGraph {
                 //  - Absent fields leave existing node state untouched, so an
                 //    insert with only a sandbox cannot destroy a cached value.
                 //  - Sandboxes are first-writer-wins.
+                // These rules are per tool call: on a merged node each call
+                // has its own value. Only a contraction merge may pair a value
+                // with another run's snapshot (see merge in contraction.rs).
                 let value_conflict = !is_new_node
                     && matches!((&entry.value, &value), (Some(old), Some(new)) if old != new);
 
