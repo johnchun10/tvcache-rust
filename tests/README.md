@@ -83,3 +83,5 @@ The eviction test creates enough data to exceed the 2 MB high watermark, warms a
 The TTL eviction test inserts a root, an expiring child with a four-node subtree, and a non-expiring sibling. It waits for the eviction loop and checks that the expired subtree is removed while the sibling remains readable. Its settings are top-level constants in `test_ttl_eviction.py`.
 
 The visualizer calls the same `DUMP_ALL` endpoint and renders one TCG at a time. Use the task selector to switch between TCGs and the refresh button to pull the latest state from the Rust server.
+
+It can also show saved dumps with no server running: `uv run visualize.py --dump <file>` for one `DUMP_ALL` file, or `--dump <run>/dumps` for the folder a training run saves at each epoch's end (`epoch_000.json`, `epoch_001.json`, ...). With a folder, every TCG is listed once per epoch, so the task selector steps through a task's epochs. The find panel needs a running server.
